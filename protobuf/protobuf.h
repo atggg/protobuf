@@ -2,6 +2,7 @@
 #include<string>
 #include<map>
 
+class protobuf;
 
 //类型0 变长int
 union t0
@@ -50,12 +51,18 @@ union t5
 	unsigned int _uint;
 	unsigned char _fixed32[4];
 };
-union data
+union pbdata
 {
+	//这个节点是var就用这些
 	t0 _varint;
 	t1 _fixed64;
 	t2 _bin;
 	t5 _fixed32;
+
+	//obj 这个节点是obj类型的 就用这个
+	std::map<std::string, protobuf*> *_obj;
+	//arr 这个节点是数组类型的 就用这个
+	std::map<int, protobuf*> *_arr;
 };
 //异常类
 class protobufException
@@ -64,6 +71,8 @@ public:
 	enum exType
 	{
 		parseError,//解析出错
+		valTypeError,//类型错误 也就是获取值的时候 不是这个类型的
+		nullError,//内容不存在
 	};
 public:
 	protobufException(exType type);
@@ -97,6 +106,7 @@ public:
 
 public:
 	protobuf();
+	protobuf(nodeType ntype, varType vtype);
 	protobuf(const protobuf& pb);
 	~protobuf();
 	//解析
@@ -121,7 +131,7 @@ public:
 	void fixed64(long long v);
 	void fixed64(unsigned long long v);
 
-	//string, bytes, embedded messages, packed repeated fields
+	//string, bytes
 	void bin(std::string v);
 
 	//fixed32, sfixed32, float
@@ -129,12 +139,13 @@ public:
 	void fixed32(int v);
 	void fixed32(unsigned int v);
 
-	t0 varint();
-	t1 fiexid64();
-	std::string bin();
-	t5 fixed32();
+	t0 varint() throw (protobufException);
+	t1 fixed64() throw (protobufException);
+	std::string bin() throw (protobufException);
+	t5 fixed32() throw (protobufException);
 
 	protobuf& operator[](std::string index);
+	protobuf& operator[](const char* index);
 	protobuf& operator[](int index);
 	protobuf& operator=(const protobuf& pb);
 
@@ -146,7 +157,19 @@ public:
 	void operator=(float v);
 
 
+	
+	//varint
+	operator int();
+	operator unsigned int();
+	operator long long();
+	operator unsigned long long();
+	operator bool();
+	//fixed64
+	operator double();
+	//bin
 	operator std::string();
+	//fixed32
+	operator float();
 
 private:
 	void clearArrObj();
@@ -160,14 +183,10 @@ private:
 
 	
 	//数据
-	data _data;
+	pbdata _data;
 	//数据类型
 	varType _vtype; //这个节点的数据类型
-	//节点类型
-	nodeType _ntype;
-	//obj 这个节点是obj类型的 就用这个
-	std::map<std::string, protobuf*> _obj;
-	//arr 这个节点是数组类型的 就用这个
-	std::map<int, protobuf*> _arr;
+	
+	nodeType _ntype; //节点类型
 };
 

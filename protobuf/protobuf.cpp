@@ -72,23 +72,46 @@ protobufException::protobufException(exType type)
 
 protobufException::exType protobufException::getExType()
 {
-	return exType();
+	return _type;
 }
 
 
 protobuf::protobuf()
 {
 
-	//设置一个就好了
-	_data._bin = nullptr;
+	//初始化一个就好了 一定要找占用空间最大的那个初始化
+	_data._varint._longlong = 0;
 
 	_vtype = varType::v_null;
-	_ntype = nodeType::n_obj; //默认是obj
+	_ntype = nodeType::n_var; //默认是var
+}
+
+protobuf::protobuf(nodeType ntype, varType vtype)
+{
+	//初始化一个就好了 一定要找占用空间最大的那个初始化
+	_data._varint._longlong = 0;
+
+	_vtype = vtype;
+	_ntype = ntype;
+	if (_ntype == nodeType::n_arr)
+	{
+		_data._arr = new std::map<int, protobuf*>;
+	}
+	else if (_ntype == nodeType::n_obj)
+	{
+		_data._obj = new std::map<std::string, protobuf*>;
+	}
+	else if (_ntype == nodeType::n_var && _vtype == varType::v_bin)
+	{
+		_data._bin = new std::string();
+	}
 }
 
 protobuf::protobuf(const protobuf& pb)
 {
 	//没办法 我喜欢偷懒啊
+	_ntype = nodeType::n_var;
+	_vtype = varType::v_null;
 	*this = pb;
 }
 
@@ -99,7 +122,8 @@ protobuf::~protobuf()
 
 protobuf protobuf::parse(std::string buff) throw(protobufException)
 {
-	protobuf pb;
+	//初始化一个对象的节点
+	protobuf pb(nodeType::n_obj,varType::v_null);
 	protobuf temp;
 	unsigned char* buffp = (unsigned char*) & buff[0];
 	unsigned long long buffSize = buff.size();
@@ -177,26 +201,26 @@ protobuf protobuf::parse(std::string buff) throw(protobufException)
 		}
 		if (tag == stag)
 		{
-			auto pit =  pb._obj.find(std::to_string(tag));
-			if (pit != pb._obj.end() && pit->second->_ntype != n_arr)
+			auto pit =  pb._data._obj->find(std::to_string(tag));
+			if (pit != pb._data._obj->end() && pit->second->_ntype != n_arr)
 			{
-				protobuf* tbuf = new protobuf;
-				tbuf->_arr.insert(std::make_pair(tbuf->_arr.size(), pit->second));
-				tbuf->_arr.insert(std::make_pair(tbuf->_arr.size(), new protobuf(temp)));
-				tbuf->_ntype = nodeType::n_arr;
-				tbuf->_vtype = types;
-				pb._obj.erase(pit);
-				pb._obj.insert(std::make_pair(std::to_string(tag),tbuf));
+				//创建一个数组类型的节点
+				//protobuf* tbuf = new protobuf(nodeType::n_arr, types);
+				protobuf* tbuf = new protobuf(nodeType::n_arr, varType::v_null);
+				tbuf->_data._arr->insert(std::make_pair(tbuf->_data._arr->size(), pit->second));
+				tbuf->_data._arr->insert(std::make_pair(tbuf->_data._arr->size(), new protobuf(temp)));
+				pb._data._obj->erase(pit);
+				pb._data._obj->insert(std::make_pair(std::to_string(tag),tbuf));
 			}
-			else if (pit != pb._obj.end() && pit->second->_ntype == n_arr)
+			else if (pit != pb._data._obj->end() && pit->second->_ntype == n_arr)
 			{
-				pit->second->_arr.insert(std::make_pair(pit->second->_arr.size(), new protobuf(temp)));
+				pit->second->_data._arr->insert(std::make_pair(pit->second->_data._arr->size(), new protobuf(temp)));
 			}
 
 		}
 		else
 		{
-			pb._obj.insert(std::make_pair(std::to_string(tag), new protobuf(temp)));
+			pb._data._obj->insert(std::make_pair(std::to_string(tag), new protobuf(temp)));
 		}
 		stag = tag;
 	}
@@ -215,7 +239,7 @@ std::string protobuf::make(long long tag)
 	std::string makeStr;
 	if (_ntype == nodeType::n_arr)
 	{
-		for (auto it = _arr.begin(); it != _arr.end(); it++)
+		for (auto it = _data._arr->begin(); it != _data._arr->end(); it++)
 		{
 			switch (it->second->_ntype)
 			{
@@ -238,7 +262,7 @@ std::string protobuf::make(long long tag)
 	}
 	else if (_ntype == nodeType::n_obj)
 	{
-		for (auto it = _obj.begin(); it != _obj.end(); it++)
+		for (auto it = _data._obj->begin(); it != _data._obj->end(); it++)
 		{
 			if (it->second->_ntype == nodeType::n_obj)
 			{
@@ -265,7 +289,11 @@ bool protobuf::parseObj(protobuf* pb, std::string& buff, unsigned long long& pos
 
 size_t protobuf::size()
 {
-	return _arr.size();
+	if (_ntype == nodeType::n_arr && _data._arr != nullptr)
+	{
+		return _data._arr->size();
+	}
+	return 0;
 }
 
 void protobuf::varint(int v)
@@ -383,56 +411,105 @@ void protobuf::fixed32(unsigned int v)
 
 t0 protobuf::varint()
 {
+	if (_vtype == varType::v_null)
+	{
+		throw protobufException(protobufException::exType::nullError);
+	}
+	if (_vtype != varType::v_varint)
+	{
+		throw protobufException(protobufException::exType::valTypeError);
+	}
 	return _data._varint;
 }
 
-t1 protobuf::fiexid64()
+t1 protobuf::fixed64()
 {
+	if (_vtype == varType::v_null)
+	{
+		throw protobufException(protobufException::exType::nullError);
+	}
+	if (_vtype != varType::v_fixed64)
+	{
+		throw protobufException(protobufException::exType::valTypeError);
+	}
 	return _data._fixed64;
 }
 
 std::string protobuf::bin()
 {
+	if (_vtype == varType::v_null)
+	{
+		throw protobufException(protobufException::exType::nullError);
+	}
+	if (_vtype != varType::v_bin)
+	{
+		throw protobufException(protobufException::exType::valTypeError);
+	}
 	return *_data._bin;
 }
 
 t5 protobuf::fixed32()
 {
+	if (_vtype == varType::v_null)
+	{
+		throw protobufException(protobufException::exType::nullError);
+	}
+	if (_vtype != varType::v_fixed32)
+	{
+		throw protobufException(protobufException::exType::valTypeError);
+	}
 	return _data._fixed32;
 }
 
 protobuf& protobuf::operator[](std::string index)
 {
-	_ntype = nodeType::n_obj;
-	auto it = _obj.find(index);
-	//现在确定了这个节点是obj类型
-	if (it != _obj.end())
+	if (_ntype != nodeType::n_obj)
+	{
+		clearArrObj();
+		_data._obj = new std::map<std::string, protobuf*>;
+		_vtype = varType::v_null;
+		_ntype = nodeType::n_obj;
+	}
+	auto it = _data._obj->find(index);
+	if (it != _data._obj->end())
 	{
 		return *it->second;
 	}
 	else
 	{
 		auto t = new protobuf;
-		_obj.insert(std::make_pair(index,t));
+		_data._obj->insert(std::make_pair(index,t));
 		return *t;
 	}
 	
 }
 
+protobuf& protobuf::operator[](const char* index)
+{
+	return (*this)[std::string(index)];
+}
+
+
 protobuf& protobuf::operator[](int index)
 {
-	//现在确定了 这个节点的类型是arr
-	_vtype = varType::v_bin;
-	_ntype = nodeType::n_arr;
-	auto it = _arr.find(index);
-	if (it != _arr.end())
+	
+	
+	if (_ntype != nodeType::n_arr)
+	{
+		clearArrObj();
+		_data._arr = new std::map<int, protobuf*>;
+		_vtype = varType::v_null;
+		_ntype = nodeType::n_arr;
+	}
+	auto it = _data._arr->find(index);
+	if (it != _data._arr->end())
 	{
 		return *it->second;
 	}
 	else
 	{
 		auto t = new protobuf;
-		_arr.insert(std::make_pair(index, t));
+		_data._arr->insert(std::make_pair(index, t));
 		return *t;
 	}
 
@@ -443,27 +520,29 @@ protobuf& protobuf::operator=(const protobuf& pb)
 	clearArrObj();
 	_vtype = pb._vtype;
 	_ntype = pb._ntype;
+	//还不知道是什么类型 先直接拷贝数据
 	_data = pb._data;
-	//这种情况是为了拷贝bin
-	if (pb._ntype == nodeType::n_var && pb._vtype == varType::v_bin)
+	//如果是数组
+	if (_ntype == nodeType::n_arr)
 	{
-		_data._bin = new std::string(*pb._data._bin);
-		return *this;
-	}
-	else if (pb._ntype == nodeType::n_arr)
-	{
-		for (auto it = pb._arr.begin(); it != pb._arr.end(); it++)
+		_data._arr = new std::map<int, protobuf*>;
+		for (auto it = pb._data._arr->begin(); it != pb._data._arr->end(); it++)
 		{
-			_arr.insert(std::make_pair(it->first, new protobuf(*it->second)));
+			_data._arr->insert(std::make_pair(it->first, new protobuf(*it->second)));
 		}
 	}
 	else if (pb._ntype == nodeType::n_obj)
 	{
-		for (auto it = pb._obj.begin(); it != pb._obj.end(); it++)
+		_data._obj = new std::map<std::string, protobuf*>;
+		for (auto it = pb._data._obj->begin(); it != pb._data._obj->end(); it++)
 		{
-			_obj.insert(std::make_pair(it->first, new protobuf(*it->second)));
+			_data._obj->insert(std::make_pair(it->first, new protobuf(*it->second)));
 		}
+	}else if (pb._ntype == nodeType::n_var && pb._vtype == varType::v_bin)
+	{
+		_data._bin = new std::string(*pb._data._bin);
 	}
+	
 	return *this;
 }
 
@@ -492,9 +571,44 @@ void protobuf::operator=(float v)
 	fixed32(v);
 }
 
+protobuf::operator int()
+{
+	return varint();
+}
+
+protobuf::operator unsigned int()
+{
+	return varint();
+}
+
+protobuf::operator long long()
+{
+	return varint();
+}
+
+protobuf::operator unsigned long long()
+{
+	return varint();
+}
+
+protobuf::operator bool()
+{
+	return varint();
+}
+
+protobuf::operator double()
+{
+	return fixed64();
+}
+
 protobuf::operator std::string()
 {
-	return *_data._bin;
+	return bin();
+}
+
+protobuf::operator float()
+{
+	return fixed32();
 }
 
 std::string protobuf::makeHead(long long tag, int type)
@@ -552,28 +666,37 @@ long long protobuf::deVarInt(std::string& buff, long long &pos)
 
 void protobuf::clearArrObj()
 {
-	//效率到时再优化
-	for (auto it = _arr.begin(); it != _arr.end(); it++)
+	//这个节点是个数组 
+	if (_ntype == nodeType::n_arr && _data._arr != nullptr)
 	{
-		if (it->second != nullptr)
+		for (auto it = _data._arr->begin(); it != _data._arr->end(); it++)
 		{
-			delete it->second;
+			if (it->second != nullptr)
+			{
+				delete it->second;
+			}
 		}
+		_data._arr->clear();
+		delete _data._arr;
 	}
-	for (auto it = _obj.begin(); it != _obj.end(); it++)
+	if (_ntype == nodeType::n_obj && _data._obj != nullptr)
 	{
-		if (it->second != nullptr)
+		for (auto it = _data._obj->begin(); it != _data._obj->end(); it++)
 		{
-			delete it->second;
+			if (it->second != nullptr)
+			{
+				delete it->second;
+			}
 		}
+		_data._obj->clear();
+		delete _data._obj;
 	}
+	//这个节点是val 并且他是 bin类型的
 	if (_vtype == varType::v_bin && _ntype == nodeType::n_var && _data._bin != nullptr)
 	{
 		delete _data._bin;
 		_data._bin = nullptr;
 	}
-	_arr.clear();
-	_obj.clear();
 }
 
 std::string protobuf::makeVar(long long tag,protobuf* var)
@@ -582,6 +705,11 @@ std::string protobuf::makeVar(long long tag,protobuf* var)
 	if (var->_ntype != nodeType::n_arr)
 	{
 		makeStr += makeHead(tag,var->_vtype);
+	}
+	else if (var->_ntype == nodeType::n_arr)
+	{
+		std::string smake = var->make(tag);
+		makeStr += smake; //添加数据
 	}
 	switch (var->_vtype)
 	{
@@ -608,11 +736,6 @@ std::string protobuf::makeVar(long long tag,protobuf* var)
 				makeStr += len;
 				//再添加他的数据
 				makeStr.append(*var->_data._bin);
-			}
-			 else if (var->_ntype == nodeType::n_arr)
-			{
-				std::string smake = var->make(tag);
-				makeStr += smake; //添加数据
 			}
 			else if (var->_ntype == nodeType::n_obj)
 			{

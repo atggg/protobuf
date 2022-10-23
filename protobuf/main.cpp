@@ -38,11 +38,36 @@ void test1()
 	buf["4"][0]["2"].bin("test1");
 	buf["4"][1]["1"].bin("test2");
 	buf["4"][1]["2"].bin("test2");
+
+
+	//test Exception
+
+	try
+	{
+		std::string t = buf["1"]; //他是varint类型的数据 我用string去接收  一定抛异常
+	}
+	catch (protobufException& e)
+	{
+		switch (e.getExType())
+		{
+			case protobufException::exType::nullError:
+			{
+				std::cout << "是null 没有存储任何数据" << std::endl;
+				break;
+			}
+			case protobufException::exType::valTypeError:
+			{
+				std::cout << "类型错误" << std::endl;
+				break;
+			}
+		}
+	}
+	
+
+
+	//test make parse
 	std::string pbstr = buf.make();
-
-	std::cout << (int)buf["1"].varint() << std::endl;
 	std::cout << tohexstr(pbstr.c_str(), pbstr.size()) << std::endl;
-
 	protobuf pb = protobuf::parse(pbstr);
 	pbstr.clear();
 	pbstr = pb.make();
