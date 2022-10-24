@@ -173,12 +173,13 @@ void protobuf::parse(std::string buff) throw(protobufException)
 			//固定64位
 			case varType::v_fixed64:
 			{
-				temp = *(double *) ( & buff.substr(pos+1, 8)[0]);
-				pos += 9;
-				if (pos > buffSize)
+				if (pos +9> buffSize)
 				{
 					throw protobufException(protobufException::exType::parseError);
 				}
+				temp = *(double *) ( & buff.substr(pos+1, 8)[0]);
+				pos += 9;
+				
 				break;
 			}
 			//bin 或者嵌套
@@ -187,7 +188,7 @@ void protobuf::parse(std::string buff) throw(protobufException)
 				std::string tstr;
 				unsigned long long len = deVarInt(buff, pos);
 				//如果取出的长度比包含他的长度还大那就是异常了
-				if (len > buffSize)
+				if (len > buffSize - pos)
 				{
 					throw protobufException(protobufException::exType::parseError);
 				}
@@ -207,12 +208,13 @@ void protobuf::parse(std::string buff) throw(protobufException)
 			//固定32位
 			case varType::v_fixed32:
 			{
-				temp = *(float*)(&buff.substr(pos+1, 4)[0]);
-				pos += 5;
-				if (pos > buffSize)
+				if (pos+5 > buffSize)
 				{
 					throw protobufException(protobufException::exType::parseError);
 				}
+				temp = *(float*)(&buff.substr(pos+1, 4)[0]);
+				pos += 5;
+				
 				break;
 			}
 		}
@@ -708,7 +710,7 @@ long long protobuf::deVarInt(std::string& buff, long long &pos) throw(protobufEx
 	{
 
 		pos++;
-		if (pos > buff.size())
+		if (pos >= buff.size())
 		{
 			throw protobufException(protobufException::exType::parseError);
 		}
