@@ -1,4 +1,5 @@
 #include "protobuf.h"
+#include<iostream>
 
 t0::operator int()
 {
@@ -117,13 +118,18 @@ protobuf::protobuf(const protobuf& pb)
 
 protobuf::~protobuf()
 {
-	clearArrObj();
+	clear();
 }
 
-protobuf protobuf::parse(std::string buff) throw(protobufException)
+void protobuf::parse(std::string buff) throw(protobufException)
 {
-	//初始化一个对象的节点
-	protobuf pb(nodeType::n_obj,varType::v_null);
+	//初始化下本类
+	clear();
+	_ntype = nodeType::n_obj;
+	_vtype = varType::v_null;
+	_data._obj = new std::map<std::string, protobuf*>;
+
+
 	protobuf temp;
 	unsigned char* buffp = (unsigned char*) & buff[0];
 	unsigned long long buffSize = buff.size();
@@ -134,7 +140,6 @@ protobuf protobuf::parse(std::string buff) throw(protobufException)
 	{
 		//取出类型
 		int type = buffp[pos] & 0x7;
-		varType types = varType::v_null;
 		//取出tag
 		long long tag = ((buffp[pos] >> 3) & 0xf);
 		int i = 1;
@@ -144,12 +149,16 @@ protobuf protobuf::parse(std::string buff) throw(protobufException)
 			do
 			{
 				pos++;
-				unsigned int t = (buffp[pos] &0x7f) << (7 * i);
+				unsigned int t = ((buffp[pos] &0x7f) << (4 * i));
 				tag += t;
 				i++;
+				if (pos > buffSize)
+				{
+					throw protobufException(protobufException::exType::parseError);
+				}
 			} while (buffp[pos] > 0x7f);
 		}
-		if (tag <= 0 || tag > buffp[pos] || type > 0x5 || type == 3 || type == 4)
+		if (tag <= 0 || (i== 1 && tag > buffp[pos]) || type > 0x5 || type == 3 || type == 4)
 		{
 			throw protobufException(protobufException::exType::parseError);
 		}
@@ -158,30 +167,35 @@ protobuf protobuf::parse(std::string buff) throw(protobufException)
 			//变长int
 			case varType::v_varint:
 			{
-				types = varType::v_varint;
 				temp = deVarInt(buff,pos);
 				break;
 			}
 			//固定64位
 			case varType::v_fixed64:
 			{
-				types = varType::v_fixed64;
-				temp = *(double *) ( & buff.substr(pos, 8)[0]);
-				pos += 8;
+				temp = *(double *) ( & buff.substr(pos+1, 8)[0]);
+				pos += 9;
+				if (pos > buffSize)
+				{
+					throw protobufException(protobufException::exType::parseError);
+				}
 				break;
 			}
 			//bin 或者嵌套
 			case varType::v_bin:
 			{
-				types = varType::v_bin;
-				
 				std::string tstr;
 				unsigned long long len = deVarInt(buff, pos);
+				//如果取出的长度比包含他的长度还大那就是异常了
+				if (len > buffSize)
+				{
+					throw protobufException(protobufException::exType::parseError);
+				}
 				tstr = buff.substr(pos, len);
 				//默认认为他是一个msg 解析失败了他就是bytes
 				try
 				{
-					temp = protobuf::parse(tstr);
+					 temp.parse(tstr);
 				}
 				catch (const protobufException& e)
 				{
@@ -193,38 +207,49 @@ protobuf protobuf::parse(std::string buff) throw(protobufException)
 			//固定32位
 			case varType::v_fixed32:
 			{
-				types = varType::v_fixed32;
-				temp = *(float*)(&buff.substr(pos, 4)[0]);
-				pos += 4;
+				temp = *(float*)(&buff.substr(pos+1, 4)[0]);
+				pos += 5;
+				if (pos > buffSize)
+				{
+					throw protobufException(protobufException::exType::parseError);
+				}
 				break;
 			}
 		}
 		if (tag == stag)
 		{
-			auto pit =  pb._data._obj->find(std::to_string(tag));
-			if (pit != pb._data._obj->end() && pit->second->_ntype != n_arr)
+			auto pit =  (*this)._data._obj->find(std::to_string(tag));
+			if (pit != (*this)._data._obj->end() && pit->second->_ntype != n_arr)
 			{
 				//创建一个数组类型的节点
-				//protobuf* tbuf = new protobuf(nodeType::n_arr, types);
 				protobuf* tbuf = new protobuf(nodeType::n_arr, varType::v_null);
 				tbuf->_data._arr->insert(std::make_pair(tbuf->_data._arr->size(), pit->second));
-				tbuf->_data._arr->insert(std::make_pair(tbuf->_data._arr->size(), new protobuf(temp)));
-				pb._data._obj->erase(pit);
-				pb._data._obj->insert(std::make_pair(std::to_string(tag),tbuf));
+
+				protobuf* tempbuf = new protobuf;
+				//把temp的资源转移给tempbuf
+				temp.move(*tempbuf);
+				tbuf->_data._arr->insert(std::make_pair(tbuf->_data._arr->size(), tempbuf));
+				(*this)._data._obj->erase(pit);
+				(*this)._data._obj->insert(std::make_pair(std::to_string(tag),tbuf));
 			}
-			else if (pit != pb._data._obj->end() && pit->second->_ntype == n_arr)
+			else if (pit != (*this)._data._obj->end() && pit->second->_ntype == n_arr)
 			{
-				pit->second->_data._arr->insert(std::make_pair(pit->second->_data._arr->size(), new protobuf(temp)));
+				protobuf* tempbuf = new protobuf;
+				//把temp的资源转移给tempbuf
+				temp.move(*tempbuf);
+				pit->second->_data._arr->insert(std::make_pair(pit->second->_data._arr->size(), tempbuf));
 			}
 
 		}
 		else
 		{
-			pb._data._obj->insert(std::make_pair(std::to_string(tag), new protobuf(temp)));
+			protobuf* tempbuf = new protobuf;
+			//把temp的资源转移给tbuf
+			temp.move(*tempbuf);
+			(*this)._data._obj->insert(std::make_pair(std::to_string(tag), tempbuf));
 		}
 		stag = tag;
 	}
-	return pb;
 }
 
 
@@ -282,10 +307,6 @@ std::string protobuf::make(long long tag)
 
 }
 
-bool protobuf::parseObj(protobuf* pb, std::string& buff, unsigned long long& pos)
-{
-	return false;
-}
 
 size_t protobuf::size()
 {
@@ -296,9 +317,21 @@ size_t protobuf::size()
 	return 0;
 }
 
+void protobuf::move(protobuf& pb)
+{
+	pb.clear();;
+	pb._ntype = _ntype;
+	pb._vtype = _vtype;
+	pb._data = _data;
+	//改变本类的类型 
+	_data._varint._longlong = 0;
+	_vtype = varType::v_null;
+	_ntype = nodeType::n_var;
+}
+
 void protobuf::varint(int v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_varint;
 	_ntype = nodeType::n_var;
 	_data._varint._int = v;
@@ -306,7 +339,7 @@ void protobuf::varint(int v)
 
 void protobuf::varint(unsigned int v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_varint;
 	_ntype = nodeType::n_var;
 	_data._varint._uint = v;
@@ -314,7 +347,7 @@ void protobuf::varint(unsigned int v)
 
 void protobuf::varint(long long v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_varint;
 	_ntype = nodeType::n_var;
 	_data._varint._longlong = v;
@@ -322,7 +355,7 @@ void protobuf::varint(long long v)
 
 void protobuf::varint(unsigned long long v)
 {
-	clearArrObj();
+	 clear();
 	_vtype = varType::v_varint;
 	_ntype = nodeType::n_var;
 	_data._varint._ulonglong = v;
@@ -330,7 +363,7 @@ void protobuf::varint(unsigned long long v)
 
 void protobuf::varint(bool v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_varint;
 	_ntype = nodeType::n_var;
 	_data._varint._bool = v;
@@ -338,7 +371,7 @@ void protobuf::varint(bool v)
 
 void protobuf::fixed64(double v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_fixed64;
 	_ntype = nodeType::n_var;
 	_data._fixed64._double = v;
@@ -346,7 +379,7 @@ void protobuf::fixed64(double v)
 
 void protobuf::fixed64(int v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_fixed64;
 	_ntype = nodeType::n_var;
 	_data._fixed64._int = v;
@@ -354,7 +387,7 @@ void protobuf::fixed64(int v)
 
 void protobuf::fixed64(unsigned int v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_fixed64;
 	_ntype = nodeType::n_var;
 	_data._fixed64._uint = v;
@@ -362,7 +395,7 @@ void protobuf::fixed64(unsigned int v)
 
 void protobuf::fixed64(long long v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_fixed64;
 	_ntype = nodeType::n_var;
 	_data._fixed64._longlong = v;
@@ -370,7 +403,7 @@ void protobuf::fixed64(long long v)
 
 void protobuf::fixed64(unsigned long long v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_fixed64;
 	_ntype = nodeType::n_var;
 	_data._fixed64._ulonglong = v;
@@ -378,7 +411,7 @@ void protobuf::fixed64(unsigned long long v)
 
 void protobuf::bin(std::string v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_bin;
 	_ntype = nodeType::n_var;
 	_data._bin = new std::string(v);
@@ -387,7 +420,7 @@ void protobuf::bin(std::string v)
 
 void protobuf::fixed32(float v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_fixed32;
 	_ntype = nodeType::n_var;
 	_data._fixed32._float = v;
@@ -395,7 +428,7 @@ void protobuf::fixed32(float v)
 
 void protobuf::fixed32(int v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_fixed32;
 	_ntype = nodeType::n_var;
 	_data._fixed32._int = v;
@@ -403,7 +436,7 @@ void protobuf::fixed32(int v)
 
 void protobuf::fixed32(unsigned int v)
 {
-	clearArrObj();
+	clear();
 	_vtype = varType::v_fixed32;
 	_ntype = nodeType::n_var;
 	_data._fixed32._uint = v;
@@ -461,11 +494,28 @@ t5 protobuf::fixed32()
 	return _data._fixed32;
 }
 
+bool protobuf::operator==(nullptr_t)
+{
+	if (_ntype == nodeType::n_var && _vtype != varType::v_null)
+	{
+		return false;
+	}
+	else if (_ntype == nodeType::n_arr && _data._arr != nullptr && _data._arr->size() != 0)
+	{
+		return false;
+	}
+	else if (_ntype == nodeType::n_obj && _data._obj != nullptr && _data._obj->size() != 0)
+	{
+		return false;
+	}
+	return true;
+}
+
 protobuf& protobuf::operator[](std::string index)
 {
 	if (_ntype != nodeType::n_obj)
 	{
-		clearArrObj();
+		clear();
 		_data._obj = new std::map<std::string, protobuf*>;
 		_vtype = varType::v_null;
 		_ntype = nodeType::n_obj;
@@ -496,7 +546,7 @@ protobuf& protobuf::operator[](int index)
 	
 	if (_ntype != nodeType::n_arr)
 	{
-		clearArrObj();
+		clear();
 		_data._arr = new std::map<int, protobuf*>;
 		_vtype = varType::v_null;
 		_ntype = nodeType::n_arr;
@@ -517,7 +567,7 @@ protobuf& protobuf::operator[](int index)
 
 protobuf& protobuf::operator=(const protobuf& pb)
 {
-	clearArrObj();
+	clear();
 	_vtype = pb._vtype;
 	_ntype = pb._ntype;
 	//还不知道是什么类型 先直接拷贝数据
@@ -650,21 +700,27 @@ std::string protobuf::enVarInt(long long v)
 	return restr;
 }
 
-long long protobuf::deVarInt(std::string& buff, long long &pos)
+long long protobuf::deVarInt(std::string& buff, long long &pos) throw(protobufException)
 {
-	pos++;
 	long long ret = 0;
 	long long i = 1;
 	do
 	{
-		ret = ret + ((buff[pos] & 0x7f) * i);
+
 		pos++;
+		if (pos > buff.size())
+		{
+			throw protobufException(protobufException::exType::parseError);
+		}
+		ret = ret + ((buff[pos] & 0x7f) * i);
 		i = i * 0x80;
+		
 	} while ((unsigned char)buff[pos] > 0x7f);
+	pos++;
 	return ret;
 }
 
-void protobuf::clearArrObj()
+void protobuf::clear()
 {
 	//这个节点是个数组 
 	if (_ntype == nodeType::n_arr && _data._arr != nullptr)
@@ -678,6 +734,7 @@ void protobuf::clearArrObj()
 		}
 		_data._arr->clear();
 		delete _data._arr;
+		_data._arr = nullptr;
 	}
 	if (_ntype == nodeType::n_obj && _data._obj != nullptr)
 	{
@@ -690,6 +747,7 @@ void protobuf::clearArrObj()
 		}
 		_data._obj->clear();
 		delete _data._obj;
+		_data._obj = nullptr;
 	}
 	//这个节点是val 并且他是 bin类型的
 	if (_vtype == varType::v_bin && _ntype == nodeType::n_var && _data._bin != nullptr)
@@ -697,6 +755,9 @@ void protobuf::clearArrObj()
 		delete _data._bin;
 		_data._bin = nullptr;
 	}
+	_ntype = nodeType::n_var;
+	_vtype = varType::v_null;
+	_data._varint._longlong = 0;
 }
 
 std::string protobuf::makeVar(long long tag,protobuf* var)

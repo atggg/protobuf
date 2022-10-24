@@ -110,12 +110,17 @@ public:
 	protobuf(const protobuf& pb);
 	~protobuf();
 	//解析
-	static protobuf parse(std::string buff) throw(protobufException);
+	void parse(std::string buff) throw(protobufException);
 	//生成
 	std::string make();
 	//返回数组的大小
 	size_t size();
-
+	//资源转移 会清空两个类 把本类的资源转移给传入的类 
+	void move(protobuf &pb);
+	//清空数据 还原到默认构造
+	void clear();
+	//判断这个节点是不是null
+	bool  operator==(nullptr_t);
 	//int32, int64, uint32, uint64, sint32, sint64, bool, enum
 	void varint(int v);
 	void varint(unsigned int v);
@@ -172,13 +177,11 @@ public:
 	operator float();
 
 private:
-	void clearArrObj();
 	std::string makeVar(long long tag,protobuf * var);
 	std::string makeHead(long long tag,int type);
 	static std::string enVarInt(long long v);
-	static long long deVarInt(std::string &buff,long long &pos);
+	static long long deVarInt(std::string &buff,long long &pos) throw(protobufException);
 	std::string make(long long tag);
-	static bool parseObj(protobuf *pb,std::string &buff,unsigned long long & pos);
 private:
 
 	
