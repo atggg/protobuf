@@ -60,7 +60,7 @@ union pbdata
 	t5 _fixed32;
 
 	//obj 这个节点是obj类型的 就用这个
-	std::map<std::string, protobuf*> *_obj;
+	std::map<unsigned long long, protobuf*> *_obj;
 	//arr 这个节点是数组类型的 就用这个
 	std::map<int, protobuf*> *_arr;
 };
@@ -108,6 +108,9 @@ public:
 	void parse(std::string buff) throw(protobufException);
 	//生成
 	std::string make();
+	//打印伪结构 detailed 是否详细打印 true 详细 false 简单
+	std::string print(bool detailed);
+	std::string print(bool detailed,std::string tag,std::string index,int t);
 	//返回数组的大小
 	size_t size();
 	//资源转移 会清空两个类 把本类的资源转移给传入的类 

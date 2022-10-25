@@ -1,5 +1,21 @@
 #include "protobuf.h"
-#include<iostream>
+
+std::string bintohex(std::string bin)
+{
+	std::string ret;
+	const unsigned char* bp = (unsigned char*)&bin[0];
+	size_t len = bin.size();
+	char d[10] = { 0 };
+	for (size_t i = 0; i < len; i++)
+	{
+		if (bp[i] <= 0xf)
+		{
+			ret.append("0");
+		}
+		ret.append(_itoa(bp[i], d, 0x10));
+	}
+	return ret;
+}
 
 t0::operator int()
 {
@@ -96,7 +112,7 @@ protobuf::protobuf(nodeType ntype)
 	}
 	else if (_nodetype == nodeType::node_obj)
 	{
-		_data._obj = new std::map<std::string, protobuf*>;
+		_data._obj = new std::map<unsigned long long, protobuf*>;
 	}
 	else if (_nodetype == nodeType::node_bin)
 	{
@@ -121,7 +137,7 @@ void protobuf::parse(std::string buff) throw(protobufException)
 	//初始化下本类
 	clear();
 	_nodetype = nodeType::node_obj;
-	_data._obj = new std::map<std::string, protobuf*>;
+	_data._obj = new std::map<unsigned long long, protobuf*>;
 
 
 	protobuf temp;
@@ -187,14 +203,22 @@ void protobuf::parse(std::string buff) throw(protobufException)
 					throw protobufException(protobufException::exType::parseError);
 				}
 				tstr = buff.substr(pos, len);
-				//默认认为他是一个msg 解析失败了他就是bytes
-				try
-				{
-					 temp.parse(tstr);
-				}
-				catch (const protobufException& e)
+				
+				if (tstr.empty())
 				{
 					temp = tstr;
+				}
+				else
+				{
+					//默认认为他是一个msg 解析失败了他就是bytes
+					try
+					{
+						temp.parse(tstr);
+					}
+					catch (const protobufException& e)
+					{
+						temp = tstr;
+					}
 				}
 				pos += len;
 				break;
@@ -214,7 +238,7 @@ void protobuf::parse(std::string buff) throw(protobufException)
 		}
 		if (tag == stag)
 		{
-			auto pit =  (*this)._data._obj->find(std::to_string(tag));
+			auto pit =  (*this)._data._obj->find(tag);
 			if (pit != (*this)._data._obj->end() && pit->second->_nodetype != nodeType::node_arr)
 			{
 				//创建一个数组类型的节点
@@ -226,7 +250,7 @@ void protobuf::parse(std::string buff) throw(protobufException)
 				temp.move(*tempbuf);
 				tbuf->_data._arr->insert(std::make_pair(tbuf->_data._arr->size(), tempbuf));
 				(*this)._data._obj->erase(pit);
-				(*this)._data._obj->insert(std::make_pair(std::to_string(tag),tbuf));
+				(*this)._data._obj->insert(std::make_pair(tag,tbuf));
 			}
 			else if (pit != (*this)._data._obj->end() && pit->second->_nodetype == nodeType::node_arr)
 			{
@@ -242,7 +266,7 @@ void protobuf::parse(std::string buff) throw(protobufException)
 			protobuf* tempbuf = new protobuf;
 			//把temp的资源转移给tbuf
 			temp.move(*tempbuf);
-			(*this)._data._obj->insert(std::make_pair(std::to_string(tag), tempbuf));
+			(*this)._data._obj->insert(std::make_pair(tag, tempbuf));
 		}
 		stag = tag;
 	}
@@ -252,6 +276,131 @@ void protobuf::parse(std::string buff) throw(protobufException)
 std::string protobuf::make()
 {
 	return make(0);
+}
+
+std::string protobuf::print(bool detailed)
+{
+	return print(detailed,"","",-1);
+}
+
+std::string protobuf::print(bool detailed,std::string tag,std::string index,int t)
+{
+	
+	std::string reStr;
+	std::string tb;
+	for (int i = 0; i < t; i++)
+	{
+		tb += "     ";
+	}
+	if (index != "")
+	{
+		index = "[" + index + "]";
+	}
+	//先判断 是什么类型
+	if (_nodetype == nodeType::node_arr)
+	{
+		for (auto it = _data._arr->begin(); it != _data._arr->end(); it++)
+		{
+			reStr += it->second->print(detailed, tag, std::to_string(it->first),t);
+		}
+	}
+	else if (_nodetype == nodeType::node_obj)
+	{
+		if (tag != "")
+		{
+			reStr += tb + "[\"" + tag + "\"]" + index+ "{message}\n";
+		}
+		for (auto it = _data._obj->begin(); it != _data._obj->end(); it++)
+		{
+			reStr += it->second->print(detailed, std::to_string(it->first), "", t+1);
+		}
+	}
+	else if (_nodetype != nodeType::node_arr && _nodetype != nodeType::node_obj && _nodetype != nodeType::node_null)
+	{
+		switch (_nodetype)
+		{
+			case nodeType::node_varint:
+			{
+				if (detailed)
+				{
+					reStr += tb + "[\"" + tag + "\"]" + index + \
+						+"("+ bintohex(makeHead(std::stoll(tag), nodeType::node_varint)) + ")" + \
+						"{varint} "+\
+						bintohex(enVarInt(_data._varint._ulonglong))\
+						+" (uint64):" + std::to_string(_data._varint._ulonglong)\
+						+ " (sint64):" + std::to_string((signed long long)((_data._varint._ulonglong % 2) ? ~(_data._varint._ulonglong / 2) : _data._varint._ulonglong / 2))\
+						+ "  (bool):" + (_data._varint._bool? std::string("true"):std::string("false")) + "\n";
+				}
+				else 
+				{
+					reStr += tb + "[\"" + tag + "\"]" +index  + \
+						"{varint} (uint64):" + std::to_string(_data._varint._ulonglong)\
+						+ " (sint64):" + std::to_string((signed long long)((_data._varint._ulonglong % 2)? ~(_data._varint._ulonglong / 2) : _data._varint._ulonglong / 2))\
+						+"  (bool):" + (_data._varint._bool ? std::string("true") : std::string("false")) + "\n";
+				}
+				break;
+			}
+			case nodeType::node_fixed64:
+			{
+				if (detailed)
+				{
+					reStr += tb + "[\"" + tag + "\"]" + index + \
+						+ "(" + bintohex(makeHead(std::stoll(tag), nodeType::node_fixed64)) + ")" + \
+						"{fixed64} " + \
+						bintohex(std::string((char*)_data._fixed64._fixed64, 8))\
+						+" (double):" + std::to_string(_data._fixed64._double) + \
+						+ " (sint64):" + std::to_string((signed long long)((_data._fixed64._ulonglong % 2) ? ~(_data._fixed64._ulonglong / 2) : _data._fixed64._ulonglong / 2)) +\
+						"  (uint64):" + std::to_string(_data._fixed64._ulonglong) + "\n";
+				}
+				else
+				{
+					reStr += tb + "[\"" + tag + "\"]" + index + \
+						"{fixed64} (double):" + std::to_string(_data._fixed64._double) + \
+						+ " (sint64):" + std::to_string((signed long long)((_data._fixed64._ulonglong % 2) ? ~(_data._fixed64._ulonglong / 2) : _data._fixed64._ulonglong / 2)) + \
+						"  (uint64):"+std::to_string(_data._fixed64._ulonglong) + "\n";
+				}
+				break;
+			}
+			case nodeType::node_bin:
+			{
+				if (detailed)
+				{
+					reStr += tb + "[\"" + tag + "\"]" + index + \
+						+ "(" + bintohex(makeHead(std::stoll(tag), nodeType::node_bin)) +" " + bintohex(enVarInt(_data._bin->size()))+ ")" + \
+						"{bin} "+\
+						bintohex(*_data._bin)\
+						+" (string):" + *_data._bin + "\n";
+				}
+				else
+				{
+					reStr += tb + "[\"" + tag + "\"]" + index + "{bin} (string):" + *_data._bin + "\n";
+				}
+				break;
+			}
+			case nodeType::node_fixed32:
+			{
+				if (detailed)
+				{
+					reStr += tb + "[\"" + tag + "\"]" + index + \
+						+ "(" + bintohex(makeHead(std::stoll(tag), nodeType::node_fixed32)) + ")" + \
+						"{fixed32} "+\
+						bintohex(std::string((char*)_data._fixed32._fixed32, 4))\
+						+" (float):" + std::to_string(_data._fixed32._float)  \
+						+ " (sint32):" + std::to_string((signed int)((_data._fixed32._uint % 2) ? ~(_data._fixed32._uint / 2) : _data._fixed32._uint / 2)) + \
+						"  (uint32):" + std::to_string(_data._fixed32._uint) + "\n";
+				}
+				else
+				{
+					reStr += tb + "[\"" + tag + "\"]" + index + \
+						"{fixed32} (float):" + std::to_string(_data._fixed32._float)  \
+						+ " (sint32):" + std::to_string((signed int)((_data._fixed32._uint % 2) ? ~(_data._fixed32._uint / 2) : _data._fixed32._uint / 2)) + \
+						"  (uint32):" + std::to_string(_data._fixed32._uint) + "\n";
+				}
+				break;
+			}
+		}
+	}
+	return reStr;
 }
 
 std::string protobuf::make(long long tag)
@@ -283,7 +432,7 @@ std::string protobuf::make(long long tag)
 		{
 			if (it->second->_nodetype == nodeType::node_obj)
 			{
-				makeStr += makeHead(std::stoll(it->first), nodeType::node_bin);
+				makeStr += makeHead(it->first, nodeType::node_bin);
 				std::string makes = it->second->make(0);
 				makeStr += enVarInt(makes.size());
 				makeStr += makes;
@@ -291,7 +440,7 @@ std::string protobuf::make(long long tag)
 			}
 			else
 			{
-				makeStr += makeVar(std::stoll(it->first), it->second);
+				makeStr += makeVar(it->first, it->second);
 			}
 		}
 	}
@@ -474,9 +623,9 @@ bool protobuf::operator==(nullptr_t)
 {
 	if (_nodetype == nodeType::node_null)
 	{
-		return false;
+		return true;
 	}
-	return true;
+	return false;
 }
 
 protobuf& protobuf::operator[](std::string index)
@@ -484,10 +633,10 @@ protobuf& protobuf::operator[](std::string index)
 	if (_nodetype != nodeType::node_obj)
 	{
 		clear();
-		_data._obj = new std::map<std::string, protobuf*>;
+		_data._obj = new std::map<unsigned long long, protobuf*>;
 		_nodetype = nodeType::node_obj;
 	}
-	auto it = _data._obj->find(index);
+	auto it = _data._obj->find(std::stoull(index));
 	if (it != _data._obj->end())
 	{
 		return *it->second;
@@ -495,7 +644,7 @@ protobuf& protobuf::operator[](std::string index)
 	else
 	{
 		auto t = new protobuf;
-		_data._obj->insert(std::make_pair(index,t));
+		_data._obj->insert(std::make_pair(std::stoull(index), t));
 		return *t;
 	}
 	
@@ -515,7 +664,7 @@ protobuf& protobuf::operator[](int index)
 	{
 		clear();
 		_data._arr = new std::map<int, protobuf*>;
-		_nodetype == nodeType::node_arr;
+		_nodetype = nodeType::node_arr;
 	}
 	auto it = _data._arr->find(index);
 	if (it != _data._arr->end())
@@ -548,7 +697,7 @@ protobuf& protobuf::operator=(const protobuf& pb)
 	}
 	else if (_nodetype == nodeType::node_obj)
 	{
-		_data._obj = new std::map<std::string, protobuf*>;
+		_data._obj = new std::map<unsigned long long, protobuf*>;
 		for (auto it = pb._data._obj->begin(); it != pb._data._obj->end(); it++)
 		{
 			_data._obj->insert(std::make_pair(it->first, new protobuf(*it->second)));
@@ -714,7 +863,7 @@ void protobuf::clear()
 		delete _data._obj;
 		_data._obj = nullptr;
 	}
-	//这个节点是val 并且他是 bin类型的
+	//bin类型的
 	if (_nodetype == nodeType::node_bin && _data._bin != nullptr)
 	{
 		delete _data._bin;
