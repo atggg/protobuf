@@ -44,7 +44,7 @@ std::string hextobin(std::string hex)
 	//去除空格
 	for (size_t i = 0; i < thex.size(); i++)
 	{
-		if (thex[i] == ' ')
+		if (thex[i] == ' ' || thex[i] == '\n')
 		{
 			thex.erase(i,1);
 		}
@@ -68,37 +68,24 @@ std::string hextobin(std::string hex)
 void test1()
 {
 	protobuf buf;
-	//这样也可以
-	//buf["1"] = 1;
-	//buf["2"][0] = "77777";
-	//buf["2"][1] = "nbnbnbnb";
-	//buf["3"]["1"] = "66666";
-	//buf["3"]["2"] = "777777";
-	//buf["4"][0]["1"] = "test1";
-	//buf["4"][0]["2"] = "test1";
-	//buf["4"][1]["1"] = "test2";
-	//buf["4"][1]["2"] = "test2";
 
-	buf["1"]["2"].bin("At");
-	buf["1"]["3"].varint(9359096);
-	buf["4"]["5"].fixed64(4.211218);
-	buf["4"]["6"].fixed32(15.01F);
-	buf["7"].bin(u8"支持 鼠标右键操作、HEX/{1,2,3} 或 拖入PB数据文件");
-	buf["8"]["10"].bin(u8":1、[string]内表示路径，里面的[int]表示同路径时的不同索引");
-	buf["8"]["11"].bin(u8":2、[]后的(HEX)表示该路径对应的HEX  = 后表示长度");
-	buf["8"]["12"].bin(u8":3、(i)=整数 (f)=小数 (d)=双精度 (b)=数据");
-	buf["8"]["13"].bin(u8":4、生成整数测试时，负数会自动根据zigzag算法转成正数");
-	buf["8"]["14"].bin(u8":5、解析得到的整数都>0，不会根据zigzag算法转成负数，需人工判断");
-	buf["15"].bin(u8":支持 解析JCE数据,一键生成组包代码(需要结合模块)");
-	buf["16"].bin(u8":作者-At-QQ-9359096");
-	buf["17"].bin(u8":仅供学习交流用,请勿用于商业及非法途径,如有法律纠纷则与作者无关.");
-
+	buf["1"]["1"] = u8"At";
+	buf["1"]["2"] = 9359096;
+	buf["2"]["1"] = 3.1415926;
+	buf["2"]["2"] = 5.20F;
+	buf["3"] = u8"[string] 代表Tag [int]代表数组下标 ";
+	buf["4"] = u8"不能使用数组嵌套数组 例如buf[\"1\"][0][0].bind(\"test\") 是非法的 buf[\"1\"][0][\"0\"] 这是合法的";
+	buf["5"] = u8"根节点一定要是对象  例如buf[0][\"\"].bin(\"test\")  buf[0].bin(\"test\") 是非法的    buf[\"1\"][0].bin(\"test\")     buf[\"1\"].bin(\"test\")  这是合法的";
+	buf["6"]["1"] = u8"varint (变长int) 可以存储  int32, int64, uint32, uint64,  bool, enum";
+	buf["6"]["2"] = u8"fixed64 (固定64位 也就是8字节) 可以存储 double ,int32, int64, uint32, uint64";
+	buf["6"]["3"] = u8"bin (bytes 这里我用std::string 去代替) 可以存储 bytes string message嵌套  如果你要设置的是message消息嵌套的话 只能用 (=) 操作 例如(buf[\"1\"] = test[\"2\"])";
+	buf["6"]["4"] = u8"fixed32 (固定32位 也就是4字节) 可以存储 float ,int32 ,uint32";
 
 	//test Exception
 
 	try
 	{
-		//std::string t = buf["1"]; //他是varint类型的数据 我用string去接收  一定抛异常
+		std::string t = buf["1"]; //他是msg嵌套类型的数据 我用string去接收  一定抛异常
 	}
 	catch (protobufException& e)
 	{
@@ -131,7 +118,6 @@ void test1()
 
 
 }
-
 
 
 int main()

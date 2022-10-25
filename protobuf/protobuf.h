@@ -87,26 +87,21 @@ class protobuf
 {
 	//枚举
 public:
-	//变量类型
-	enum varType
-	{
-		v_varint = 0,
-		v_fixed64 = 1,
-		v_bin = 2,
-		v_fixed32 = 5,
-		v_null = 6,
-	};
 	//这个节点的类型
 	enum nodeType
 	{
-		n_obj,//对象类型
-		n_arr,//数组类型
-		n_var,//变量类型
+		node_varint = 0,
+		node_fixed64 = 1,
+		node_bin = 2,
+		node_fixed32 = 5,
+		node_obj,//对象类型
+		node_arr,//数组类型
+		node_null,
 	};
 
 public:
 	protobuf();
-	protobuf(nodeType ntype, varType vtype);
+	protobuf(nodeType ntype);
 	protobuf(const protobuf& pb);
 	~protobuf();
 	//解析
@@ -187,9 +182,7 @@ private:
 	
 	//数据
 	pbdata _data;
-	//数据类型
-	varType _vtype; //这个节点的数据类型
-	
-	nodeType _ntype; //节点类型
+	//节点类型
+	nodeType _nodetype; 
 };
 
