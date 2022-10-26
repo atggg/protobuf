@@ -98,6 +98,11 @@ public:
 		node_arr,//数组类型
 		node_null,
 	};
+	enum symbol
+	{
+		symbol_signed,
+		symbol_unsigned,
+	};
 
 public:
 	protobuf();
@@ -110,7 +115,7 @@ public:
 	std::string make();
 	//打印伪结构 detailed 是否详细打印 true 详细 false 简单
 	std::string print(bool detailed);
-	std::string print(bool detailed,std::string tag,std::string index,int t);
+	std::string print(bool detailed, std::string tag, std::string index, int t);
 	//返回数组的大小
 	size_t size();
 	//资源转移 会清空两个类 把本类的资源转移给传入的类 
@@ -120,10 +125,10 @@ public:
 	//判断这个节点是不是null
 	bool  operator==(nullptr_t);
 	//int32, int64, uint32, uint64, sint32, sint64, bool, enum
-	void varint(int v);
-	void varint(unsigned int v);
-	void varint(long long v);
-	void varint(unsigned long long v);
+	void varint(int v, symbol t = symbol::symbol_unsigned);
+	void varint(unsigned int v, symbol t = symbol::symbol_unsigned);
+	void varint(long long v, symbol t = symbol::symbol_unsigned);
+	void varint(unsigned long long v, symbol t = symbol::symbol_unsigned);
 	void varint(bool v);
 	
 
@@ -142,7 +147,7 @@ public:
 	void fixed32(int v);
 	void fixed32(unsigned int v);
 
-	t0 varint() throw (protobufException);
+	t0 varint(symbol t = symbol::symbol_unsigned) throw (protobufException);
 	t1 fixed64() throw (protobufException);
 	std::string bin() throw (protobufException);
 	t5 fixed32() throw (protobufException);
@@ -177,7 +182,7 @@ public:
 private:
 	std::string makeVar(long long tag,protobuf * var);
 	std::string makeHead(long long tag,int type);
-	static std::string enVarInt(long long v);
+	static std::string enVarInt(unsigned long long v);
 	static long long deVarInt(std::string &buff,long long &pos) throw(protobufException);
 	std::string make(long long tag);
 private:
@@ -186,6 +191,6 @@ private:
 	//数据
 	pbdata _data;
 	//节点类型
-	nodeType _nodetype; 
+	nodeType _nodetype;
 };
 

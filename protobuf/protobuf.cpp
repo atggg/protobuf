@@ -328,14 +328,16 @@ std::string protobuf::print(bool detailed,std::string tag,std::string index,int 
 						"{varint} "+\
 						bintohex(enVarInt(_data._varint._ulonglong))\
 						+" (uint64):" + std::to_string(_data._varint._ulonglong)\
-						+ " (sint64):" + std::to_string((signed long long)((_data._varint._ulonglong % 2) ? ~(_data._varint._ulonglong / 2) : _data._varint._ulonglong / 2))\
+						+ " (sint64):" + std::to_string(_data._varint._longlong)\
+						+ " (signed int):" + std::to_string((signed long long)((_data._varint._ulonglong % 2) ? ~(_data._varint._ulonglong / 2) : _data._varint._ulonglong / 2))\
 						+ "  (bool):" + (_data._varint._bool? std::string("true"):std::string("false")) + "\n";
 				}
 				else 
 				{
 					reStr += tb + "[\"" + tag + "\"]" +index  + \
 						"{varint} (uint64):" + std::to_string(_data._varint._ulonglong)\
-						+ " (sint64):" + std::to_string((signed long long)((_data._varint._ulonglong % 2)? ~(_data._varint._ulonglong / 2) : _data._varint._ulonglong / 2))\
+						+ " (sint64):" + std::to_string(_data._varint._longlong)\
+						+ " (signed int):" + std::to_string((signed long long)((_data._varint._ulonglong % 2)? ~(_data._varint._ulonglong / 2) : _data._varint._ulonglong / 2))\
 						+"  (bool):" + (_data._varint._bool ? std::string("true") : std::string("false")) + "\n";
 				}
 				break;
@@ -349,15 +351,15 @@ std::string protobuf::print(bool detailed,std::string tag,std::string index,int 
 						"{fixed64} " + \
 						bintohex(std::string((char*)_data._fixed64._fixed64, 8))\
 						+" (double):" + std::to_string(_data._fixed64._double) + \
-						+ " (sint64):" + std::to_string((signed long long)((_data._fixed64._ulonglong % 2) ? ~(_data._fixed64._ulonglong / 2) : _data._fixed64._ulonglong / 2)) +\
-						"  (uint64):" + std::to_string(_data._fixed64._ulonglong) + "\n";
+						+ " (uint64):" + std::to_string(_data._fixed64._ulonglong) +\
+						"  (sint64):" + std::to_string(_data._fixed64._longlong) + "\n";
 				}
 				else
 				{
 					reStr += tb + "[\"" + tag + "\"]" + index + \
 						"{fixed64} (double):" + std::to_string(_data._fixed64._double) + \
-						+ " (sint64):" + std::to_string((signed long long)((_data._fixed64._ulonglong % 2) ? ~(_data._fixed64._ulonglong / 2) : _data._fixed64._ulonglong / 2)) + \
-						"  (uint64):"+std::to_string(_data._fixed64._ulonglong) + "\n";
+						+ " (uint64):" + std::to_string(_data._fixed64._ulonglong) + \
+						"  (sint64):"+std::to_string(_data._fixed64._longlong) + "\n";
 				}
 				break;
 			}
@@ -386,15 +388,15 @@ std::string protobuf::print(bool detailed,std::string tag,std::string index,int 
 						"{fixed32} "+\
 						bintohex(std::string((char*)_data._fixed32._fixed32, 4))\
 						+" (float):" + std::to_string(_data._fixed32._float)  \
-						+ " (sint32):" + std::to_string((signed int)((_data._fixed32._uint % 2) ? ~(_data._fixed32._uint / 2) : _data._fixed32._uint / 2)) + \
-						"  (uint32):" + std::to_string(_data._fixed32._uint) + "\n";
+						+ " (uint32):" + std::to_string(_data._fixed32._uint) + \
+						"  (sint32):" + std::to_string(_data._fixed32._int) + "\n";
 				}
 				else
 				{
 					reStr += tb + "[\"" + tag + "\"]" + index + \
 						"{fixed32} (float):" + std::to_string(_data._fixed32._float)  \
-						+ " (sint32):" + std::to_string((signed int)((_data._fixed32._uint % 2) ? ~(_data._fixed32._uint / 2) : _data._fixed32._uint / 2)) + \
-						"  (uint32):" + std::to_string(_data._fixed32._uint) + "\n";
+						+ " (uint32):" + std::to_string(_data._fixed32._uint) + \
+						"  (sint32):" + std::to_string(_data._fixed32._int) + "\n";
 				}
 				break;
 			}
@@ -468,32 +470,79 @@ void protobuf::move(protobuf& pb)
 	_nodetype = nodeType::node_null;
 }
 
-void protobuf::varint(int v)
+void protobuf::varint(int v, symbol t)
 {
 	clear();
+	unsigned long long temp = v;
 	_nodetype = nodeType::node_varint;
-	_data._varint._int = v;
+	if (t == symbol::symbol_unsigned || v==0)
+	{
+		_data._varint._int = v;
+	}
+	else
+	{
+		if (v < 0)
+		{
+			_data._varint._ulonglong = ((~temp) * 2) + 1;
+		}
+		else
+		{
+			_data._varint._ulonglong = temp * 2;
+		}
+	}
+	
 }
 
-void protobuf::varint(unsigned int v)
+void protobuf::varint(unsigned int v, symbol t)
 {
 	clear();
+	unsigned long long temp = v;
 	_nodetype = nodeType::node_varint;
-	_data._varint._uint = v;
+	if (t == symbol::symbol_unsigned || v == 0)
+	{
+		_data._varint._uint = v;
+	}
+	else
+	{
+		_data._varint._ulonglong = temp * 2;
+	}
 }
 
-void protobuf::varint(long long v)
+void protobuf::varint(long long v, symbol t)
 {
 	clear();
+	unsigned long long temp = v;
 	_nodetype = nodeType::node_varint;
-	_data._varint._longlong = v;
+	if (t == symbol::symbol_unsigned || v == 0)
+	{
+		_data._varint._longlong = v;
+	}
+	else
+	{
+		if (v < 0)
+		{
+			_data._varint._ulonglong = ((~temp) * 2) + 1;
+		}
+		else
+		{
+			_data._varint._ulonglong = temp * 2;
+		}
+	}
 }
 
-void protobuf::varint(unsigned long long v)
+void protobuf::varint(unsigned long long v , symbol t)
 {
-	 clear();
-	 _nodetype = nodeType::node_varint;
-	_data._varint._ulonglong = v;
+	clear();
+	unsigned long long temp = v;
+	_nodetype = nodeType::node_varint;
+	if (t == symbol::symbol_unsigned || v == 0)
+	{
+		_data._varint._longlong = v;
+	}
+	else
+	{
+		_data._varint._ulonglong = temp * 2;
+	}
 }
 
 void protobuf::varint(bool v)
@@ -567,7 +616,7 @@ void protobuf::fixed32(unsigned int v)
 	_data._fixed32._uint = v;
 }
 
-t0 protobuf::varint()
+t0 protobuf::varint(symbol t)
 {
 	if (_nodetype == nodeType::node_null)
 	{
@@ -577,7 +626,16 @@ t0 protobuf::varint()
 	{
 		throw protobufException(protobufException::exType::valTypeError);
 	}
-	return _data._varint;
+	t0 v;
+	if (t == symbol::symbol_unsigned)
+	{
+		v = _data._varint;
+	}
+	else
+	{
+		v._longlong = ((_data._varint._ulonglong % 2) ? ~(_data._varint._ulonglong / 2) : _data._varint._ulonglong / 2);
+	}
+	return v;
 }
 
 t1 protobuf::fixed64()
@@ -794,9 +852,9 @@ std::string protobuf::makeHead(long long tag, int type)
 	return restr;
 }
 
-std::string protobuf::enVarInt(long long v)
+std::string protobuf::enVarInt(unsigned long long v)
 {
-	long long temp = v;
+	unsigned long long temp = v;
 	std::string restr;
 	do
 	{

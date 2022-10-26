@@ -144,9 +144,28 @@ void test2()
 	std::string pstr = buf.print(false);
 	std::cout << pstr << std::endl;
 }
+
+void test3()
+{
+	protobuf buf;
+	buf["1"].varint(-1,protobuf::symbol::symbol_signed);
+	buf["2"][0].bin("77777");
+	buf["2"][1].bin("nbnbnbnb");
+	buf["3"].bin("man");
+	buf["4"].varint(18);
+	buf["5"][0]["1"].bin("info-1");
+	buf["5"][0]["2"].fixed64(-1ll);
+	buf["5"][1]["1"].bin("info-2");
+	buf["5"][1]["2"].fixed64(3);
+	std::string pbstr = buf.make();
+	std::cout << bintohex(pbstr) << std::endl;
+	std::string str = buf.print(false);
+	std::cout << str << std::endl;
+}
 int main()
 {
 	//test1();
 	test2();
+	//test3();
 	return 0;
 }
